@@ -1,0 +1,96 @@
+name: Preprocessing Pipeline
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "customer_churn_raw/**"
+      - "preprocessing/automate_Ahmada.py"
+      - "preprocessing/requirements.txt"
+  workflow_dispatch:
+    inputs:
+      reason:
+        description: "Reason for manual trigger"
+        required: false
+        default: "Manual preprocessing run"
+
+permissions:
+  contents: write
+
+jobs:
+  preprocess:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r preprocessing/requirements.txt
+
+      - name: Download raw dataset from Kaggle
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          mkdir -p customer_churn_raw
+          python -c "
+          import kagglehub
+          import os, shutil
+          path = kagglehub.dataset_download('harrachimustapha/customer-churn-uplift-and-feedback-dataset')
+          if not os.path.exists(os.path.join(path, 'train.csv')):
+              for item in os.listdir(path):
+                  sub = os.path.join(path, item)
+                  if os.path.isdir(sub) and 'train.csv' in os.listdir(sub):
+                      path = sub
+                      break
+          for item in os.listdir(path):
+              src = os.path.join(path, item)
+              dst = os.path.join('customer_churn_raw', item)
+              if os.path.isdir(src):
+                  shutil.copytree(src, dst, dirs_exist_ok=True)
+              else:
+                  shutil.copy2(src, dst)
+          print('Raw data downloaded to customer_churn_raw/')
+          "
+
+      - name: Run preprocessing pipeline
+        run: |
+          python preprocessing/automate_Ahmada.py
+
+      - name: Verify preprocessed output
+        run: |
+          echo "=== Preprocessed files ==="
+          ls -lh preprocessing/customer_churn_preprocessing/
+          echo ""
+          echo "=== File count ==="
+          ls preprocessing/customer_churn_preprocessing/ | wc -l
+
+      - name: Commit preprocessed data
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add preprocessing/customer_churn_preprocessing/
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore: update preprocessed dataset [skip ci]"
+            git push
+          fi
+
+      - name: Upload preprocessed data as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: preprocessed-dataset
+          path: preprocessing/customer_churn_preprocessing/
+          retention-days: 30
