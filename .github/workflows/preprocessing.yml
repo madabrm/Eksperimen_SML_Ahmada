@@ -38,32 +38,6 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r preprocessing/requirements.txt
 
-      - name: Download raw dataset from Kaggle
-        env:
-          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
-          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
-        run: |
-          mkdir -p customer_churn_raw
-          python -c "
-          import kagglehub
-          import os, shutil
-          path = kagglehub.dataset_download('harrachimustapha/customer-churn-uplift-and-feedback-dataset')
-          if not os.path.exists(os.path.join(path, 'train.csv')):
-              for item in os.listdir(path):
-                  sub = os.path.join(path, item)
-                  if os.path.isdir(sub) and 'train.csv' in os.listdir(sub):
-                      path = sub
-                      break
-          for item in os.listdir(path):
-              src = os.path.join(path, item)
-              dst = os.path.join('customer_churn_raw', item)
-              if os.path.isdir(src):
-                  shutil.copytree(src, dst, dirs_exist_ok=True)
-              else:
-                  shutil.copy2(src, dst)
-          print('Raw data downloaded to customer_churn_raw/')
-          "
-
       - name: Run preprocessing pipeline
         run: |
           python preprocessing/automate_Ahmada.py
